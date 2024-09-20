@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "xtb_trading_bot"
+version = "0.1.0"
+description = "xtb trading bot"
+authors = ["David Dvořák"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+websocket-client = "^1.8.0"
+python-dotenv = "^1.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
