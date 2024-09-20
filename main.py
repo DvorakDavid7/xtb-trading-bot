@@ -2,25 +2,25 @@ import threading
 import time
 import websocket, json, os
 from typing import Any, Callable
-from threading import Thread
 
 from websocket import create_connection
-from StreamClient import create_streaming_connection
 from dotenv import load_dotenv
+
+from xtb_trading_bot.xtb_client import XtbClient
 
 load_dotenv()
 
 
 SESSION_ID = ""
 
-user_id = os.getenv("USER_ID")
+client_id = os.getenv("USER_ID")
 password = os.getenv("PASSWORD")
 
 
 login_cmd = {
 	"command": "login",
 	"arguments": {
-		"userId":user_id,
+		"userId": client_id,
 		"password": password,
 		"appId": "",
 		"appName": ""
@@ -51,6 +51,10 @@ get_keep_alive_cmd = {
 	"streamSessionId": ""
 }
 
+ping = {
+	"command": "ping"
+}
+
 
 def measure_execution(func: Callable[[], Any]):
     def wrapper():
@@ -64,11 +68,15 @@ def measure_execution(func: Callable[[], Any]):
     return wrapper
 
 
-def keep_alive(ws):
+def keep_alive(ws: websocket.WebSocketApp):
     global SESSION_ID
     while True:
-        get_keep_alive_cmd["streamSessionId"] = SESSION_ID
-        ws.send(json.dumps(ping_cmd))
+        # cmd = ping_cmd
+        # cmd["streamSessionId"] = SESSION_ID
+
+        ws.send(json.dumps(ping))
+        print(f"sending {ping}")
+        time.sleep(1)
 
 
 def on_message(ws: websocket.WebSocketApp, message: str):
@@ -110,6 +118,8 @@ def main2():
     print(f"ws_stream: {ws_stream.connected}")
 
     ws_stream.send(json.dumps(cmd))
+    # threading.Thread(target=keep_alive, args=(ws_stream,), daemon=True).start()
+    threading.Thread(target=keep_alive, args=(ws,), daemon=True).start()
     try:
         while True:
             msg = ws_stream.recv()
@@ -144,5 +154,16 @@ def main():
     ws_stream.run_forever()
 
 
+def main():
+    url = "wss://ws.xtb.com/demo"
+    stream_url = "wss://ws.xtb.com/demoStream"
+    client = XtbClient(client_id, password, url, stream_url)
+    client.login()
+    client.streaming_connect()
+    client.keep_alive()
+    client.subscribe_to_get_keep_alive()
+    client.subscripbe_to_get_candles()
+    client.read_stream()
+
 if __name__ == "__main__":
-    main2()
+    main()
