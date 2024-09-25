@@ -6,6 +6,8 @@ from typing import Any, Callable
 from websocket import create_connection
 from dotenv import load_dotenv
 
+from xtb_trading_bot.commands import Period
+from xtb_trading_bot.time_utils import TimeStamp
 from xtb_trading_bot.xtb_client import XtbClient
 
 load_dotenv()
@@ -161,10 +163,10 @@ def main():
     client.login()
     client.streaming_connect()
     # client.keep_alive()
-    symbol = "EURUSD"
+    symbol = "ETHEREUM"
     # client.get_all_symbols()
     # client.get_symbol(symbol)
-    client.get_chart_last_request(symbol)
+    client.get_chart_last_request(symbol, TimeStamp().now().sub_min(2), Period.PERIOD_M1)
     # client.subscribe_to_get_keep_alive()
     # client.subscribe_to_get_tick_prices(symbol)
     # client.subscribe_to_get_balance()

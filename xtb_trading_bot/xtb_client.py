@@ -3,9 +3,10 @@ import random
 import threading
 import time
 
-import websockets
-from xtb_trading_bot.commands import cmd_get_all_symbols, cmd_get_balance, cmd_get_candles, cmd_get_chart_last_request, cmd_get_keep_alive, cmd_get_symbol, cmd_get_tick_prices, cmd_get_trades, cmd_login, cmd_ping
+from xtb_trading_bot.commands import Period, cmd_get_all_symbols, cmd_get_balance, cmd_get_candles, cmd_get_chart_last_request, cmd_get_keep_alive, cmd_get_symbol, cmd_get_tick_prices, cmd_get_trades, cmd_login, cmd_ping
 from websockets.sync.client import connect, ClientConnection
+
+from xtb_trading_bot.time_utils import TimeStamp
 
 
 logging.basicConfig(level=logging.INFO)
@@ -61,11 +62,31 @@ class XtbClient():
         message = self.conn.recv()
         logger.info(message)
 
-    def get_chart_last_request(self, symbol: str):
-        cmd = cmd_get_chart_last_request(symbol)
+    def get_chart_last_request(self, symbol: str, start: TimeStamp, period: Period):
+        cmd = cmd_get_chart_last_request(symbol, start, period)
         self._send_command(self.conn, cmd)
-        message = self.conn.recv()
-        logger.info(message)
+        data = json.loads(self.conn.recv())
+        logger.info(data)
+
+        if data["status"] != True:
+            logger.error("false status, ", data)
+            raise ValueError("false status")
+
+        return_data = data["returnData"]
+
+        digits = return_data["digits"]
+        logger.info(digits)
+        rate_infos = return_data["rateInfos"]
+
+        for val in rate_infos:
+            o = val["open"]
+            open = o / (10 ** digits)
+            close = (o + val["close"]) / (10 ** digits)
+            high = (o + val["high"]) / (10 ** digits)
+            low = (o + val["low"]) / (10 ** digits)
+
+            ctm = val["ctmString"]
+            logger.info(f"cmt: {ctm}, open: {open}, close: {close}, high: {high}, low: {low}")
 
     def subscribe_to_get_keep_alive(self):
         cmd = cmd_get_keep_alive(self.stream_session_id)
