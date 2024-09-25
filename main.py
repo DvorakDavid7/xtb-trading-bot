@@ -166,7 +166,7 @@ def main():
     symbol = "ETHEREUM"
     # client.get_all_symbols()
     # client.get_symbol(symbol)
-    client.get_chart_last_request(symbol, TimeStamp().now().sub_min(2), Period.PERIOD_M1)
+    client.get_chart_last_request(symbol, TimeStamp().now().sub_hr(2), Period.PERIOD_M1)
     # client.subscribe_to_get_keep_alive()
     # client.subscribe_to_get_tick_prices(symbol)
     # client.subscribe_to_get_balance()
