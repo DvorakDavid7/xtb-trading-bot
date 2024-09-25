@@ -160,9 +160,17 @@ def main():
     client = XtbClient(client_id, password, url, stream_url)
     client.login()
     client.streaming_connect()
-    client.keep_alive()
-    client.subscribe_to_get_keep_alive()
-    client.subscripbe_to_get_candles()
+    # client.keep_alive()
+    symbol = "EURUSD"
+    # client.get_all_symbols()
+    # client.get_symbol(symbol)
+    client.get_chart_last_request(symbol)
+    # client.subscribe_to_get_keep_alive()
+    # client.subscribe_to_get_tick_prices(symbol)
+    # client.subscribe_to_get_balance()
+    # client.subscribe_to_get_trades()
+    # client.subscribe_to_get_candles(symbol)
+
     client.read_stream()
 
 if __name__ == "__main__":
