@@ -1,5 +1,4 @@
 import json
-import time
 from enum import Enum
 
 from xtb_trading_bot.time_utils import TimeStamp

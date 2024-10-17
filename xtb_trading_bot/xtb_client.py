@@ -1,15 +1,13 @@
 import json, logging
-import os
+import queue
 import random
 import threading
 import time
 import pandas as pd
-import mplfinance as mpf
 
-
-from xtb_trading_bot.commands import Period, cmd_get_all_symbols, cmd_get_balance, cmd_get_candles, cmd_get_chart_last_request, cmd_get_keep_alive, cmd_get_symbol, cmd_get_tick_prices, cmd_get_trades, cmd_login, cmd_ping
+from xtb_trading_bot.commands import *
 from websockets.sync.client import connect, ClientConnection
-
+from lightweight_charts import Chart
 from xtb_trading_bot.time_utils import TimeStamp
 
 
@@ -17,50 +15,19 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-binance_dark = {
-    "base_mpl_style": "dark_background",
-    "marketcolors": {
-        "candle": {"up": "#3dc985", "down": "#ef4f60"},  
-        "edge": {"up": "#3dc985", "down": "#ef4f60"},  
-        "wick": {"up": "#3dc985", "down": "#ef4f60"},  
-        "ohlc": {"up": "green", "down": "red"},
-        "volume": {"up": "#247252", "down": "#82333f"},  
-        "vcedge": {"up": "green", "down": "red"},  
-        "vcdopcod": False,
-        "alpha": 1,
-    },
-    "mavcolors": ("#ad7739", "#a63ab2", "#62b8ba"),
-    "facecolor": "#1b1f24",
-    "gridcolor": "#2c2e31",
-    "gridstyle": "--",
-    "y_on_right": True,
-    "rc": {
-        "axes.grid": True,
-        "axes.grid.axis": "y",
-        "axes.edgecolor": "#474d56",
-        "axes.titlecolor": "red",
-        "figure.facecolor": "#161a1e",
-        "figure.titlesize": "x-large",
-        "figure.titleweight": "semibold",
-    },
-    "base_mpf_style": "binance-dark",
-}
 
 class XtbClient():
-
     conn: ClientConnection
     stream_conn: ClientConnection
 
-    def __init__(self, client_id: str, password: str, url: str, stream_url: str):
+    def __init__(self, client_id: str, password: str, url: str, stream_url: str, data_queue: queue.Queue):
         self.client_id = client_id
         self.password = password
         self.url = url
         self.stream_url = stream_url
+        self.data_queue = data_queue
 
-        self.conn = None
-        self.stream_conn = None
-
-        self.stream_session_id = None
+        self.stream_session_id = ""
 
     def login(self):
         self.conn = connect(self.url, max_size=None)
@@ -76,7 +43,7 @@ class XtbClient():
         self.stream_session_id = message["streamSessionId"]
 
     def streaming_connect(self):
-        self.stream_conn = connect(self.stream_url)
+        self.stream_conn = connect(self.stream_url, max_size=None)
         logger.info(f"successfully connected to stream {self.stream_url}")
 
     def get_all_symbols(self):
@@ -86,7 +53,7 @@ class XtbClient():
         filename = "symbols.json"
         message = self.conn.recv()
         with open(filename, "w") as file:
-            file.write(message)
+            file.write(str(message))
         logger.info(f"symbols written to the '{filename}' file")
 
     def get_symbol(self, symbol: str):
@@ -95,20 +62,18 @@ class XtbClient():
         message = self.conn.recv()
         logger.info(message)
 
-    def get_chart_last_request(self, symbol: str, start: TimeStamp, period: Period):
+    def get_chart_last_request(self, symbol: str, start: TimeStamp, period: Period) -> pd.DataFrame:
         cmd = cmd_get_chart_last_request(symbol, start, period)
         self._send_command(self.conn, cmd)
         data = json.loads(self.conn.recv())
-        logger.info(data)
+        # logger.info(data)
 
         if data["status"] != True:
             logger.error("false status, ", data)
             raise ValueError("false status")
 
         return_data = data["returnData"]
-
         digits = return_data["digits"]
-        logger.info(digits)
         rate_infos = return_data["rateInfos"]
 
         table = {
@@ -120,9 +85,6 @@ class XtbClient():
             "low": []
         }
 
-        file = open("test.csv", "w")
-
-        file.write("date, open, close, high, low, volume\n")
         for val in rate_infos:
             o = val["open"]
             open_ = o / (10 ** digits)
@@ -131,33 +93,16 @@ class XtbClient():
             low = (o + val["low"]) / (10 ** digits)
 
             volume = val["vol"]
-            ctm_str = val["ctmString"]
-            ctm = val["ctm"]
+            date = pd.to_datetime(val["ctm"], unit="ms").tz_localize("UTC").tz_convert("Europe/Prague")
 
             table["open"].append(open_)
             table["close"].append(close)
             table["high"].append(high)
             table["low"].append(low)
-            table["date"].append(pd.to_datetime(ctm, unit="ms").tz_localize("UTC").tz_convert("Europe/Prague"))
+            table["date"].append(date)
             table["volume"].append(volume)
             
-            file.write(f"{ctm},{open_},{close},{high},{low},{volume}\n")
-
-        df = pd.DataFrame(table)
-        df.set_index("date", inplace=True)
-        df.sort_index(inplace=True)
-        df.resample("H")
-        df_hourly = df.resample('H').agg({
-            "open": "first",  # Open is the first price of the hour
-            "high": "max",    # High is the maximum price of the hour
-            "low": "min",     # Low is the minimum price of the hour
-            "close": "last",  # Close is the last price of the hour
-            "volume": "sum"   # Volume is the sum of the volume for the hour
-        })
-
-        print(df)
-        mpf.plot(df, type="candle", style=binance_dark, volume=True)
-        file.close()
+        return pd.DataFrame(data=table)
 
 
     def subscribe_to_get_keep_alive(self):
@@ -165,6 +110,10 @@ class XtbClient():
         self._send_command(self.stream_conn, cmd)
 
     def subscribe_to_get_candles(self, symbol: str):
+        # this must be called before reading live data
+        # https://github.com/peterszombati/xapi-node/issues/17
+        self.get_symbol(symbol)
+
         cmd = cmd_get_candles(self.stream_session_id, symbol)
         self._send_command(self.stream_conn, cmd)
 
@@ -193,6 +142,7 @@ class XtbClient():
         while True:
             message = self.stream_conn.recv()
             logger.info(message)
+            self.data_queue.put(message)
 
     def _send_command(self, connection: ClientConnection, cmd: str):
         try:
