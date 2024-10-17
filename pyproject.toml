@@ -12,7 +12,7 @@ python-dotenv = "^1.0.1"
 websockets = "^13.0.1"
 matplotlib = "^3.9.2"
 mplfinance = "^0.12.10b0"
-lightweight-charts = "^2.1"
+# lightweight-charts = "^2.1"
 backtesting = { git = "https://github.com/kernc/backtesting.py.git" }
 
 

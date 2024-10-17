@@ -1,13 +1,15 @@
 import json, logging
+import os
 import queue
 import random
 import threading
 import time
+from typing import Optional
+from dotenv import load_dotenv
 import pandas as pd
 
 from xtb_trading_bot.commands import *
 from websockets.sync.client import connect, ClientConnection
-from lightweight_charts import Chart
 from xtb_trading_bot.time_utils import TimeStamp
 
 
@@ -15,16 +17,17 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
+load_dotenv()
 
 class XtbClient():
     conn: ClientConnection
     stream_conn: ClientConnection
 
-    def __init__(self, client_id: str, password: str, url: str, stream_url: str, data_queue: queue.Queue):
-        self.client_id = client_id
-        self.password = password
-        self.url = url
-        self.stream_url = stream_url
+    def __init__(self, data_queue: Optional[queue.Queue] = None):
+        self.client_id = os.getenv("USER_ID") or ""
+        self.password = os.getenv("PASSWORD") or ""
+        self.url = "wss://ws.xtb.com/demo"
+        self.stream_url = "wss://ws.xtb.com/demoStream"
         self.data_queue = data_queue
 
         self.stream_session_id = ""
@@ -77,12 +80,12 @@ class XtbClient():
         rate_infos = return_data["rateInfos"]
 
         table = {
-            "date": [],
-            "volume": [],
-            "open": [],
-            "close": [],
-            "high": [],
-            "low": []
+            "Date": [],
+            "Volume": [],
+            "Open": [],
+            "Close": [],
+            "High": [],
+            "Low": []
         }
 
         for val in rate_infos:
@@ -95,12 +98,12 @@ class XtbClient():
             volume = val["vol"]
             date = pd.to_datetime(val["ctm"], unit="ms").tz_localize("UTC").tz_convert("Europe/Prague")
 
-            table["open"].append(open_)
-            table["close"].append(close)
-            table["high"].append(high)
-            table["low"].append(low)
-            table["date"].append(date)
-            table["volume"].append(volume)
+            table["Open"].append(open_)
+            table["Close"].append(close)
+            table["High"].append(high)
+            table["Low"].append(low)
+            table["Date"].append(date)
+            table["Volume"].append(volume)
             
         return pd.DataFrame(data=table)
 
@@ -142,7 +145,8 @@ class XtbClient():
         while True:
             message = self.stream_conn.recv()
             logger.info(message)
-            self.data_queue.put(message)
+            if self.data_queue != None:
+                self.data_queue.put(message)
 
     def _send_command(self, connection: ClientConnection, cmd: str):
         try:

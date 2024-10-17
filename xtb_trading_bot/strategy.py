@@ -1,25 +1,50 @@
-import random
 import pandas as pd
 from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 
 from backtesting.test import SMA, GOOG
 
+from xtb_trading_bot.commands import Period
+from xtb_trading_bot.time_utils import TimeStamp
+from xtb_trading_bot.xtb_client import XtbClient
+
+
 class SmaCross(Strategy):
+    n1 = 5
+    n2 = 15
+
     def init(self):
-        price = self.data.Close
-        self.ma1 = self.I(SMA, price, 10)
-        self.ma2 = self.I(SMA, price, 20)
+        self.sma1 = self.I(SMA, self.data.Close, self.n1)
+        self.sma2 = self.I(SMA, self.data.Close, self.n2)
 
     def next(self):
-        if random.randint(1, 5) > 3:
+        print(self.position.pl)
+        if crossover(self.sma1, self.sma2):
+            self.position.close()
             self.buy()
-        else:
+        elif crossover(self.sma2, self.sma1):
+            self.position.close()
             self.sell()
 
+
 if __name__ == "__main__":
-    pass
-    # bt = Backtest(GOOG, SmaCross, cash=10000, commission=.002, exclusive_orders=True)
-    # output = bt.run()
-    # print(output)
-    # bt.plot(filename="plot.html")
+    client = XtbClient()
+    client.login()
+    symbol = "ETHEREUM"
+    df = client.get_chart_last_request(symbol, TimeStamp().now().sub_hr(10), Period.PERIOD_M1)
+
+    bt = Backtest(df, SmaCross, cash=3000)
+
+    result = bt.run()
+
+    bt.plot(filename="plot.html")
+
+    print(result)
+
+    # stats = bt.optimize(n1=range(5, 30, 5),
+    #                     n2=range(10, 70, 5),
+    #                     maximize='Equity Final [$]',
+    #                     constraint=lambda param: param.n1 < param.n2)
+    # print(stats._strategy)
+
+    # print(result)
